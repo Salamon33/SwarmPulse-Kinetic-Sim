@@ -1,0 +1,255 @@
+// SwarmPulse v5.8 - The Bug-Free Window Manager
+// Developed by Omar - Systems Engineer
+
+let boids = [];
+let receivers = [];
+let centralGridEnergy = 0;
+let timeOffset = 0;
+
+// HUD State & Variables
+let hudX = 20, hudY = 20, hudW = 340, hudH = 480;
+let draggingHUD = false, resizingHUD = false;
+let isMinimized = false, isClosed = false;
+let deleteMode = false; // الخطأ كان هنا.. تم تعريفه عالمياً الآن
+let offsetX, offsetY;
+
+const SPECIES = {
+  BEE: { name: "BEE", size: 6, speed: 4, yield: 0.05, color: [0, 255, 100] },
+  BEETLE: { name: "BEETLE", size: 12, speed: 2.5, yield: 0.20, color: [200, 0, 255] },
+  BIRD: { name: "BIRD", size: 18, speed: 6, yield: 0.60, color: [255, 20, 50] }
+};
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  addUnits(SPECIES.BEE, 20);
+  receivers.push(new Receiver(width * 0.3, height * 0.5));
+}
+
+function draw() {
+  background(5, 8, 15);
+  
+  // Simulation Logic
+  let windForce = createVector(map(noise(timeOffset), 0, 1, -0.1, 0.1), map(noise(timeOffset + 1000), 0, 1, -0.05, 0.05));
+  timeOffset += 0.005;
+
+  drawSpawnPoint();
+  for (let r of receivers) r.display();
+  
+  let activeHarvesters = 0;
+  for (let b of boids) {
+    b.applyForce(windForce);
+    b.run(boids, receivers);
+    if (b.state === "harvesting") activeHarvesters++;
+  }
+
+  // UI Layer
+  drawOSWindow(activeHarvesters);
+}
+
+function drawSpawnPoint() {
+  push(); translate(width/2, height/2);
+  noFill(); stroke(0, 255, 200, 30);
+  ellipse(0, 0, 40 + sin(frameCount*0.1)*10);
+  pop();
+}
+
+function addUnits(type, count) { 
+  for (let i = 0; i < count; i++) boids.push(new Boid(width/2, height/2, type)); 
+}
+
+function removeUnits(typeName, count) {
+  let removed = 0;
+  for (let i = boids.length - 1; i >= 0; i--) {
+    if (boids[i].config.name === typeName && removed < count) {
+      boids.splice(i, 1);
+      removed++;
+    }
+  }
+}
+
+function mousePressed() {
+  if (isClosed) {
+    if (dist(mouseX, mouseY, 40, 40) < 20) isClosed = false;
+    else if (!isHUDArea(mouseX, mouseY)) handleStageClick();
+    return;
+  }
+
+  // Check Title Bar (Drag & Buttons)
+  if (mouseX > hudX && mouseX < hudX + hudW && mouseY > hudY && mouseY < hudY + 35) {
+    if (mouseX > hudX + hudW - 30) isClosed = true;
+    else if (mouseX > hudX + hudW - 60) isMinimized = !isMinimized;
+    else {
+      draggingHUD = true;
+      offsetX = hudX - mouseX; offsetY = hudY - mouseY;
+    }
+  } 
+  // Check Resize Handle (Bottom-Right)
+  else if (!isMinimized && mouseX > hudX + hudW - 20 && mouseX < hudX + hudW && mouseY > hudY + hudH - 20 && mouseY < hudY + hudH) {
+    resizingHUD = true;
+  }
+  // Inside HUD Controls
+  else if (!isMinimized && mouseX > hudX && mouseX < hudX + hudW && mouseY > hudY && mouseY < hudY + hudH) {
+    handleHUDButtons();
+  }
+  // Click on Stage
+  else {
+    handleStageClick();
+  }
+}
+
+function handleHUDButtons() {
+  let relX = mouseX - hudX;
+  let relY = mouseY - hudY;
+  
+  // Add/Remove Logic
+  if (relX > 20 && relX < 250) {
+    if (relY > 175 && relY < 197) addUnits(SPECIES.BEE, 5);
+    if (relY > 205 && relY < 227) addUnits(SPECIES.BEETLE, 5);
+    if (relY > 235 && relY < 257) addUnits(SPECIES.BIRD, 5);
+  }
+  if (relX > 260 && relX < 300) {
+    if (relY > 175 && relY < 197) removeUnits("BEE", 5);
+    if (relY > 205 && relY < 227) removeUnits("BEETLE", 5);
+    if (relY > 235 && relY < 257) removeUnits("BIRD", 5);
+  }
+  
+  // Infrastructure Logic
+  if (relY > 380 && relY < 402) deleteMode = !deleteMode;
+  if (relY > 410 && relY < 432) receivers = [];
+}
+
+function handleStageClick() {
+  if (deleteMode) {
+    for (let i = receivers.length-1; i>=0; i--) {
+      if (dist(mouseX, mouseY, receivers[i].position.x, receivers[i].position.y) < 30) {
+        receivers.splice(i,1); break;
+      }
+    }
+  } else { 
+    receivers.push(new Receiver(mouseX, mouseY)); 
+  }
+}
+
+function isHUDArea(x, y) {
+  if (isClosed) return false;
+  let h = isMinimized ? 35 : hudH;
+  return (x > hudX && x < hudX + hudW && y > hudY && y < hudY + h);
+}
+
+function mouseReleased() { draggingHUD = false; resizingHUD = false; }
+function mouseDragged() {
+  if (draggingHUD) { hudX = mouseX + offsetX; hudY = mouseY + offsetY; }
+  if (resizingHUD) { hudW = max(250, mouseX - hudX); hudH = max(200, mouseY - hudY); }
+}
+
+function drawOSWindow(activeHarvesters) {
+  if (isClosed) {
+    fill(0, 255, 200, 150); ellipse(40, 40, 35);
+    fill(0); textSize(18); textAlign(CENTER, CENTER); text("⚙", 40, 40);
+    return;
+  }
+
+  fill(15, 25, 45, 250); stroke(255, 30);
+  rect(hudX, hudY, hudW, isMinimized ? 35 : hudH, 8);
+  
+  fill(0, 255, 200, 40); noStroke();
+  rect(hudX, hudY, hudW, 35, 8, 8, 0, 0);
+  
+  fill(255, 80, 80); ellipse(hudX + hudW - 15, hudY + 17, 10);
+  fill(255, 200, 0); ellipse(hudX + hudW - 40, hudY + 17, 10);
+  
+  fill(0, 255, 200); textAlign(LEFT); textSize(12); textStyle(BOLD);
+  text("SWARMPULSE OS v5.8", hudX + 15, hudY + 22);
+
+  if (!isMinimized) {
+    drawWindowContent();
+    stroke(255, 50); line(hudX+hudW-15, hudY+hudH-5, hudX+hudW-5, hudY+hudH-15);
+  }
+}
+
+function drawWindowContent() {
+  let counts = { BEE: 0, BEETLE: 0, BIRD: 0 };
+  for (let b of boids) counts[b.config.name]++;
+  
+  noStroke(); textStyle(NORMAL);
+  fill(150); textSize(10); text("── POPULATION ──", hudX + 20, hudY + 60);
+  fill(255); text(`Bees: ${counts.BEE} | Beetles: ${counts.BEETLE} | Birds: ${counts.BIRD}`, hudX + 20, hudY + 80);
+  
+  fill(150); text("── POWER ANALYTICS ──", hudX + 20, hudY + 110);
+  fill(0, 255, 200); textSize(13); text(`Yield: ${centralGridEnergy.toFixed(1)} mWh`, hudX + 20, hudY + 130);
+  
+  fill(150); text("── SPECIES CONTROL ──", hudX + 20, hudY + 165);
+  drawActionRow(hudY + 175, "BEE", SPECIES.BEE.color);
+  drawActionRow(hudY + 205, "BEETLE", SPECIES.BEETLE.color);
+  drawActionRow(hudY + 235, "BIRD", SPECIES.BIRD.color);
+
+  fill(150); text("── INFRASTRUCTURE ──", hudX + 20, hudY + 370);
+  drawSimpleBtn(hudY + 380, deleteMode ? "CANCEL DELETE" : "DELETE TOWER MODE", deleteMode ? [255, 50, 50] : [200, 200, 200]);
+  drawSimpleBtn(hudY + 410, "CLEAR ALL TOWERS", [255, 100, 100]);
+}
+
+function drawActionRow(y, label, col) {
+  fill(col[0], col[1], col[2], 30); stroke(col);
+  rect(hudX + 20, y, 230, 22, 4);
+  fill(255); noStroke(); text(`ADD ${label} (+5)`, hudX + 30, y + 15);
+  fill(255, 50, 50, 30); stroke(255, 50, 50);
+  rect(hudX + 260, y, 40, 22, 4);
+  fill(255); noStroke(); text("[-]", hudX + 273, y + 15);
+}
+
+function drawSimpleBtn(y, label, col) {
+  fill(col[0], col[1], col[2], 30); stroke(col);
+  rect(hudX + 20, y, 280, 22, 4);
+  fill(255); noStroke(); textAlign(CENTER); text(label, hudX + 160, y + 15);
+  textAlign(LEFT);
+}
+
+// Logic Classes
+class Boid {
+  constructor(x, y, config) {
+    this.position = createVector(x, y); this.velocity = p5.Vector.random2D();
+    this.acceleration = createVector(0, 0); this.config = config;
+    this.maxSpeed = config.speed; this.maxForce = 0.15;
+    this.battery = random(60, 100); this.state = "free";
+  }
+  run(boids, receivers) { this.decisionLogic(receivers); this.update(); this.display(); }
+  decisionLogic(receivers) {
+    if (this.battery < 30) this.state = "harvesting"; else if (this.battery > 98) this.state = "free";
+    if (this.state === "harvesting" && receivers.length > 0) {
+      let target = this.findClosestReceiver(receivers);
+      this.applyForce(this.seek(target.position));
+      if (p5.Vector.dist(this.position, target.position) < 50) { this.battery += 1.2; centralGridEnergy += this.config.yield; }
+    } else { this.battery -= 0.05; this.acceleration.add(p5.Vector.random2D().mult(0.04)); }
+  }
+  findClosestReceiver(receivers) {
+    let closest = receivers[0]; let record = Infinity;
+    for (let r of receivers) { let d = p5.Vector.dist(this.position, r.position); if (d < record) { record = d; closest = r; } }
+    return closest;
+  }
+  seek(target) {
+    let desired = p5.Vector.sub(target, this.position); desired.setMag(this.maxSpeed);
+    let steer = p5.Vector.sub(desired, this.velocity); steer.limit(this.maxForce); return steer;
+  }
+  applyForce(f) { this.acceleration.add(f); }
+  update() { this.velocity.add(this.acceleration); this.velocity.limit(this.maxSpeed); this.position.add(this.velocity); this.acceleration.mult(0); this.borders(); }
+  display() {
+    let theta = this.velocity.heading() + PI / 2;
+    fill(this.state === "harvesting" ? color(this.config.color) : color(80, 80, 80, 180));
+    push(); translate(this.position.x, this.position.y); rotate(theta); noStroke();
+    if (this.config.name === "BIRD") triangle(0, -this.config.size, -this.config.size/1.5, this.config.size, this.config.size/1.5, this.config.size);
+    else if (this.config.name === "BEE") { ellipse(0, 0, this.config.size, this.config.size * 1.4); stroke(255, 100); strokeWeight(1); line(-this.config.size, 0, this.config.size, 0); }
+    else { rectMode(CENTER); rect(0, 0, this.config.size, this.config.size * 1.2, 4); }
+    pop();
+  }
+  borders() { if (this.position.x < 0) this.position.x = width; if (this.position.y < 0) this.position.y = height; if (this.position.x > width) this.position.x = 0; if (this.position.y > height) this.position.y = 0; }
+}
+
+class Receiver {
+  constructor(x, y) { this.position = createVector(x, y); }
+  display() {
+    stroke(deleteMode ? [255, 50, 50] : [0, 255, 200, 100]); noFill(); ellipse(this.position.x, this.position.y, 60, 60);
+    fill(deleteMode ? [255, 50, 50] : [0, 255, 200]); noStroke(); ellipse(this.position.x, this.position.y, 8, 8);
+  }
+}
+
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
