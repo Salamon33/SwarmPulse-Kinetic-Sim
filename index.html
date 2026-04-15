@@ -1,13 +1,19 @@
-// SwarmPulse v5.8 - The Bug-Free Window Manager
-// Developed by Omar - Systems Engineer
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <title>SwarmPulse - Kinetic Energy Simulation</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+    </style>
 </head>
 <body>
     <script>
-    // ارمي الكود بتاعك اللي احنا كتبناه سوا هنا بالظبط
+    // SwarmPulse v5.8 - The Bug-Free Window Manager
+// Developed by Omar - Systems Engineer
+
 let boids = [];
 let receivers = [];
 let centralGridEnergy = 0;
@@ -260,6 +266,6 @@ class Receiver {
 }
 
 function windowResized() { resizeCanvas(windowWidth, windowHeight); }
-</script>
+    </script>
 </body>
 </html>
